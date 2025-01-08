@@ -13,6 +13,7 @@
   "description": "",
   "dependencies": {
     "@elastic/elasticsearch": "^8.17.0",
+    "@faker-js/faker": "^9.3.0",
     "body-parser": "^1.20.3",
     "dotenv": "^16.4.7",
     "ioredis": "^5.4.2",

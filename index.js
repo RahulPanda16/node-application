@@ -3,31 +3,19 @@ const restify = require("restify");
 const bodyParser = require("body-parser");
 const connection = require('./config/db');
 const Redis = require("ioredis");
-const mysql = require("mysql2");
+const mysql = require("mysql2/promise");
 const port = process.env.PORT;
 const { v4: uuidv4 } = require('uuid');
 const id = uuidv4();
-
-
-// const connectionSql = mysql.createConnection({
-//     host: "localhost",
-//     user: "root",
-//     password: "",
-//     database:'nodecrud',
-//     port:process.env.MYSQL_PORT
-//   });
-
+const {Client} = require("@elastic/elasticsearch")
 
 const server = restify.createServer();
-const redis = new Redis({port:process.env.REDIS_PORT, host:process.env.REDIS_IP,connectTimeout:10000});
-
+server.use(bodyParser.json());
 
 let db;
 connection().then((database) =>{
     db = database; 
 })
-
-server.use(bodyParser.json());
 
 server.get('/mongo/get', async (req, res) => { 
     try { 
@@ -108,24 +96,28 @@ server.put("/mongo/update/:id", async (req, res) => {
     }
   });
 
-// MYSQL CRUD 
 
-server.get("/sql/get", async(req, res) => {
-    try {
-        const data = await connectionSql.execute(
-          `SELECT *  from users;`
-        );
-        res.json({
-          users:data,
-        });
-      } 
-      catch (err) {
-        res.json({
-          message: err,
-        });
-      }
+  
+// MYSQL CRUD 
+const pool = mysql.createPool({
+  host: process.env.MYSQL_HOST,
+  user: process.env.MYSQL_USER,
+  password: process.env.MYSQL_PASSWORD,
+  database:process.env.MYSQL_DATABASE,
+  port:process.env.MYSQL_PORT
 });
 
+server.get("/sql/get", async(req, res) => { 
+      try { 
+        const connection = await pool.getConnection(); 
+        const [data] = await connection.query(`SELECT * FROM users;`); 
+        connection.release(); 
+        
+        res.json({ users: data, }); 
+      } catch (err) { 
+        res.json({ message: err.message, }); 
+      }
+});
 
 server.post("/sql/create", async(req,res) => {
     try {
@@ -134,11 +126,15 @@ server.post("/sql/create", async(req,res) => {
         const email = req.body.email;
         const password = req.body.password;
 
-        const [data] = await connectionSql.execute(
-            `INSERT INTO users (fisrtname, lastname, email, password) 
+        const connection = await pool.getConnection();
+
+        const [data] = await connection.query(
+            `INSERT INTO users (firstname, lastname, email, password) 
                 VALUES (?,?,?,?)`,
             [firstname, lastname, email, password]
           );
+
+        connection.release();
 
           res.json({
             message: "User Created",
@@ -147,53 +143,44 @@ server.post("/sql/create", async(req,res) => {
 
     } catch (error) {
         res.json({
-            message:error,
+            message:error.message,
         })
         console.error(error);
     }
 })
 
 server.patch("/sql/update/:id", async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { firstname, lastname, email } = req.body;
-      const [update] = await connection
-        .execute(
-          `UPDATE users set firstname = ?, lastname = ?, email = ? where id = ?`,
-          [ firstname, lastname, email ,id]
-        );
-      res.json({
-        message: "updated",
-        data:update
-      });
-    } catch (err) {
-      res.json({
-        message: err,
-      });
+    try { 
+      const { id } = req.params; 
+      const { firstname, lastname, email } = req.body; 
+      const connection = await pool.getConnection(); 
+      const [update] = await connection.query( `UPDATE users SET firstname = ?, lastname = ?, email = ? WHERE id = ?`, [firstname, lastname, email, id] ); 
+      connection.release(); 
+      
+      res.json({ message: "updated", data: update }); 
+    } catch (err) { 
+      res.json({ message: err.message, });
+     }
+  });
+
+server.del("/sql/delete/:id", async (req, res) => {
+    try { 
+      const { id } = req.params; 
+      const connection = await pool.getConnection(); 
+      await connection.query( `DELETE FROM users WHERE id = ?`, [id] ); 
+      connection.release(); 
+      
+      res.json({ message: "Data Deleted Successfully", });
+     } catch (err) { 
+      res.json({ message: err.message, }); 
     }
   });
 
-server.post("/sql/delete/:id", async (req, res) => {
-    try {
-      const { id } = req.params;
-      await connection
-        .execute(
-          `DELETE FROM  users where id = ?`,
-          [id]
-        );
-      res.json({
-        message: "deleted",
-      });
-    } catch (err) {
-      res.json({
-        message: err,
-      });
-    }
-  });
 
 
 //   REDIS CRUD 
-// const userKey = `user:user@gmail.com`;
+
+const redis = new Redis({port:process.env.REDIS_PORT, host:process.env.REDIS_IP,connectTimeout:10000});
 
 server.post('/redis/create' , async(req,res) =>{
     const firstname = req.body.firstname;
@@ -212,9 +199,12 @@ server.post('/redis/create' , async(req,res) =>{
      )
      res.json({
         response,
-        message:"User saved successfully"
+        message:"User saved successfully"    
      })
+})
 
+redis.on('connect', ()=>{
+  console.log("Redis Connected Successfully");
 })
 
 server.get("/redis/get", async(req,res)=>{
@@ -224,6 +214,98 @@ server.get("/redis/get", async(req,res)=>{
     })
 })
 
+server.del("/redis/delete/:name", async (req, res) => {
+  console.log(req.params.name);
+  const result = await redis.del(req.params.name);
+  console.log(result);
+  res.json({result});
+});
+
+
+
+
+// Elasticsearch crud
+
+const client = new Client({
+  node:process.env.ELASTIC_SEARCH
+})
+
+server.post("/elastic/createClient", async(req, res) =>{
+  const index = req.body.username;
+  await client.indices.create({index:index});
+
+  res.json({
+    message:"Successfully created index"
+  })
+})
+
+server.post("/elastic/create",async(req,res)=>{
+  const {firstname, lastname, email, password} = req.body;
+
+  try {
+    const response = await client.index({index:'userrahul',body:{firstname,lastname,email,password}});
+    res.json({
+      message:"Successfully Added",
+      data:response
+    })
+  } catch (error) {
+    res.json({
+      message:"Failed to save",
+      error:error
+    })
+  }
+})
+
+server.get("/elastic/get/:index", async(req,res) =>{
+  const index = req.params.index;
+
+  try {
+    const response = await client.search({index:index});
+
+    res.json({
+      message:"Success",
+      data:response
+    })
+  } catch (error) {
+    res.json({
+      message:"Failed",
+      error:error,
+    })
+  }
+})
+
+server.put("/elastic/update/:index/:id", async(req,res) =>{
+  const {firstname,lastname,email } = req.body;
+  const index = req.params.index;
+  const id = req.params.id;
+
+  const data = {firstname,lastname,email};
+
+  const response = await client.update({
+    index:index,
+    id:id,
+    doc:data
+  })
+
+  res.json({
+    message:"Successfully Updated",
+    data:response
+  })
+})
+
+server.del("/elastic/delete/:index/:id", async(req,res)=>{
+  const index = req.params.index;
+  const id = req.params.id;
+
+  await client.delete({
+    index:index,
+    id:id
+  })
+
+  res.json({
+    message:"Successfully Deleted"
+  })
+})
 
 
 server.listen(port,process.env.IP_PORT, ()=>{

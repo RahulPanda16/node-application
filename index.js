@@ -229,6 +229,51 @@ const client = new Client({
   node: process.env.ELASTIC_SEARCH,
 });
 
+server.get("/sql/getbulkdata/:gender/:zsign", async (req, res) => {
+  const gender = req.params.gender;
+  const zsign = req.params.zsign;
+
+  const connection = await pool.getConnection();
+  const [data] = await connection.query(
+    "SELECT * FROM bulkdata WHERE gender=? AND zodiacSign=? LIMIT 1000 ",
+    [gender, zsign]
+  );
+  connection.release();
+
+  res.json({
+    message: "success",
+    response: data,
+  });
+});
+
+server.get("/mongo/getbulkdata/:gender/:zsign", async (req, res) => {
+  const zsign = req.params.zsign;
+  const gender = req.params.gender;
+
+  let collection = await db.collection("bulkdata");
+  const resultdata = await collection
+    .find({ gender: gender, zodiacSign: zsign })
+    .toArray();
+  res.json({ message: "success", response: resultdata });
+});
+
+server.get("/elastic/getbulkdata/:gender/:zsign", async (req, res) => {
+  const gender = req.params.gender;
+  const zsign = req.params.zsign;
+  const response = await client.search({
+    index: "rahul-detail",
+    body: {
+      query: {
+        bool: {
+          must: [{ term: { gender: gender } }, { term: { zsign: zsign } }],
+        },
+      },
+    },
+  });
+
+  res.json({ message: "success", response });
+});
+
 server.post("/elastic/createClient", async (req, res) => {
   const index = req.body.username;
   await client.indices.create({ index: index });
@@ -330,11 +375,23 @@ server.post("/elastic/createBulk", async (req, res) => {
     const lastname = faker.internet.username();
     const email = faker.internet.email();
     // const password = faker.internet.password();
-    const gender = faker.person.gender();
+    const gender = faker.person.sex();
     const zodiacSign = faker.person.zodiacSign();
+    const epocTime = new Date().valueOf();
+    const date = new Date().toLocaleDateString();
+    const time = new Date().toLocaleTimeString();
 
-    bulkData.push({ index: { _index: "rahul" } });
-    bulkData.push({ firstname, lastname, email, gender, zodiacSign });
+    bulkData.push({ index: { _index: "rahul-detail" } });
+    bulkData.push({
+      firstname,
+      lastname,
+      email,
+      gender,
+      zodiacSign,
+      epocTime,
+      date,
+      time,
+    });
   }
 
   try {

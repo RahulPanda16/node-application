@@ -8,7 +8,7 @@ const port = process.env.PORT;
 const { v4: uuidv4 } = require("uuid");
 const id = uuidv4();
 const { Client } = require("@elastic/elasticsearch");
-const { faker } = require("@faker-js/faker");
+const { faker, da } = require("@faker-js/faker");
 
 const server = restify.createServer();
 server.use(bodyParser.json());
@@ -238,44 +238,90 @@ server.post("/elastic/createClient", async (req, res) => {
   });
 });
 
-// function createRandomUser(){
-//   return {
-//     firstname:faker.internet.username(),
-//     lastname:faker.internet.username(),
-//     email:faker.internet.email(),
-//     password:faker.internet.password(),
-//   }
-// }
+server.post("/sql/createBulk", async (req, res) => {
+  let bulkData = [];
+  for (let i = 0; i < 10000; i++) {
+    const firstname = faker.internet.username();
+    const lastname = faker.internet.username();
+    const email = faker.internet.email();
+    const gender = faker.person.sex();
+    const zodiacSign = faker.person.zodiacSign();
+    const epocTime = new Date().valueOf();
+    const date = new Date().toLocaleDateString();
+    const time = new Date().toLocaleTimeString();
+    // const password = faker.internet.password();
+    bulkData.push({
+      firstname,
+      lastname,
+      email,
+      gender,
+      zodiacSign,
+      epocTime,
+      date,
+      time,
+    });
+  }
 
-// count users = faker.helpers.multiple(createRandomUser,{
-//   count:
-// })
+  try {
+    const query = `INSERT INTO bulkdata (firstname, lastname, email, gender, zodiacSign, epocTime, date, time) VALUES ?`;
+    const connection = await pool.getConnection();
+    const [data] = await connection.query(query, [bulkData.map(Object.values)]);
+    connection.release();
 
-// server.post("/elastic/createBulk",async(req,res)=>{
+    if (data.affectedRows !== bulkData.length) {
+      res.json({
+        message: "Failed to save some or all documents",
+        error: "Insertion count mismatch",
+      });
+    } else {
+      res.json({ message: "Successfully Added", data });
+    }
+  } catch (error) {
+    res.json({ message: "Failed to save", error: error.message });
+  }
+});
 
-//   let bulkData = [];
+server.post("/mongo/createBulk", async (req, res) => {
+  let bulkData = [];
+  for (let i = 0; i < 1000000; i++) {
+    const firstname = faker.internet.username();
+    const lastname = faker.internet.username();
+    const email = faker.internet.email();
+    const gender = faker.person.sex();
+    const zodiacSign = faker.person.zodiacSign();
+    const epocTime = new Date().valueOf();
+    const date = new Date().toLocaleDateString();
+    const time = new Date().toLocaleTimeString();
+    // const password = faker.internet.password();
+    bulkData.push({
+      id,
+      firstname,
+      lastname,
+      email,
+      gender,
+      zodiacSign,
+      epocTime,
+      date,
+      time,
+    });
+  }
 
-//   for(let i =0; i<100000; i++ ){
-//     const firstname = faker.internet.username()
-//     const lastname = faker.internet.username()
-//     const email = faker.internet.email()
-//     const password = faker.internet.password()
-//     bulkData.push({index:'fakerbulk'});
-//     bulkData.push({firstname,lastname,email,password});
-//   }
-//   try {
-//     const response = await client.bulk({body:bulkData});
-//     res.json({
-//       message:"Successfully Added",
-//       data:response
-//     })
-//   } catch (error) {
-//     res.json({
-//       message:"Failed to save",
-//       error:error
-//     })
-//   }
-// })
+  try {
+    let collection = await db.collection("bulkdata");
+    const response = await collection.insertMany(bulkData, { ordered: true });
+
+    if (response.insertedCount !== bulkData.length) {
+      res.json({
+        message: "Failed to save some or all documents",
+        error: "Insertion count mismatch",
+      });
+    } else {
+      res.json({ message: "Successfully Added", data: response });
+    }
+  } catch (error) {
+    res.json({ message: "Failed to save", error: error });
+  }
+});
 
 server.post("/elastic/createBulk", async (req, res) => {
   let bulkData = [];
@@ -283,9 +329,12 @@ server.post("/elastic/createBulk", async (req, res) => {
     const firstname = faker.internet.username();
     const lastname = faker.internet.username();
     const email = faker.internet.email();
-    const password = faker.internet.password();
-    bulkData.push({ index: { _index: "fakerbulk" } });
-    bulkData.push({ firstname, lastname, email, password });
+    // const password = faker.internet.password();
+    const gender = faker.person.gender();
+    const zodiacSign = faker.person.zodiacSign();
+
+    bulkData.push({ index: { _index: "rahul" } });
+    bulkData.push({ firstname, lastname, email, gender, zodiacSign });
   }
 
   try {
@@ -337,7 +386,7 @@ server.post("/elastic/create", async (req, res) => {
 
 server.get("/elastic/get", async (req, res) => {
   try {
-    const response = await client.search({ index: "fakerbulk" });
+    const response = await client.search({ index: "rahul" });
 
     res.json({
       message: "Success",

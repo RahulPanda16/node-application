@@ -1,6 +1,6 @@
 const { MongoClient, ServerApiVersion } = require("mongodb");
 
-const url = process.env.MONGO_URL 
+const url = process.env.MONGO_URL;
 // || "mongodb+srv://goofy:neutrenz123@cluster0.wemic.mongodb.net/";
 
 const client = new MongoClient(url, {

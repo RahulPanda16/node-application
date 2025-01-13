@@ -1,287 +1,48 @@
 require("dotenv").config();
 const restify = require("restify");
 const bodyParser = require("body-parser");
-const connection = require("./config/db");
-const Redis = require("ioredis");
-const mysql = require("mysql2/promise");
-const port = process.env.PORT;
-const { v4: uuidv4 } = require("uuid");
-const id = uuidv4();
-const { Client } = require("@elastic/elasticsearch");
-const { faker, da } = require("@faker-js/faker");
+const connection = require("./config/db")
+const { createReport } = require("./utils/createReport");
+const { getMongoData, createMongoData, updateMongoData, deleteMongoData,createMongoBulk, db } = require("./Controller/mongodb");
+const { getSqlData, createSqlData, updateSqlData, deleteSqlData, pool, } = require("./Controller/mysql");
+const { createRedisData, getRedisData, deleteRedisData } = require("./Controller/redis");
+const { deleteElasticData, createElasticData, readElasticDataAll, updateElasticData, deleteElasticIndex, createElasticBulkData, readElasticDataByIndex, createIndex, client } = require("./Controller/elasticsearch");
 
 const server = restify.createServer();
 server.use(bodyParser.json());
 
-let db;
-connection().then((database) => {
-  db = database;
-});
+let mongoDb = db;
+const mysqlDb = pool;
+let elasticDb = client;
 
-server.get("/mongo/get", async (req, res) => {
-  try {
-    let collection = await db.collection("users");
-    var data = await collection.find().toArray();
-    res.json({
-      success: true,
-      data: data,
-    });
-  } catch (error) {
-    console.error(error);
-    res.json({
-      success: false,
-      message: "Internal Server Error",
-    });
-  }
-});
-
-server.post("/mongo/create", async (req, res) => {
-  const { firstname, lastname, email, password } = req.body;
-
-  let collection = await db.collection("users");
-
-  await collection.insertOne({
-    id,
-    firstname,
-    lastname,
-    email,
-    password,
-  });
-
-  res.json({
-    message: "Data Added Successfully",
-  });
-});
-
-server.put("/mongo/update/:id", async (req, res) => {
-  try {
-    const id = req.params.id;
-    const firstname = req.body.firstname;
-    const lastname = req.body.lastname;
-    const email = req.body.email;
-
-    let collection = await db.collection("users");
-    let data = await collection.updateOne(
-      { id: id },
-      {
-        $set: {
-          firstname: firstname,
-          lastname: lastname,
-          email: email,
-        },
-      }
-    );
-
-    res.json({
-      message: "updated",
-      data: data,
-    });
-  } catch (err) {
-    res.json({
-      message: err,
-    });
-  }
-});
-
-server.post("/mongo/delete/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const collection = db.collection("users");
-    await collection.deleteOne({ id: id });
-
-    res.json({
-      message: "deleted",
-    });
-  } catch (err) {
-    res.json({
-      message: err,
-    });
-  }
-});
+// Mongo Crud
+server.get("/mongo/get", getMongoData);
+server.post("/mongo/create", createMongoData);
+server.put("/mongo/update/:id", updateMongoData);
+server.del("/mongo/delete/:id", deleteMongoData);
 
 // MYSQL CRUD
-const pool = mysql.createPool({
-  host: process.env.MYSQL_HOST,
-  user: process.env.MYSQL_USER,
-  password: process.env.MYSQL_PASSWORD,
-  database: process.env.MYSQL_DATABASE,
-  port: process.env.MYSQL_PORT,
-});
+server.get("/sql/get", getSqlData);
+server.post("/sql/create", createSqlData);
+server.patch("/sql/update/:id", updateSqlData);
+server.del("/sql/delete/:id", deleteSqlData);
 
-server.get("/sql/get", async (req, res) => {
-  try {
-    const connection = await pool.getConnection();
-    const [data] = await connection.query(`SELECT * FROM users;`);
-    connection.release();
+// REDIS CRUD
+server.post("/redis/create", createRedisData);
+server.get("/redis/get", getRedisData);
+server.del("/redis/delete/:name", deleteRedisData);
 
-    res.json({ users: data });
-  } catch (err) {
-    res.json({ message: err.message });
-  }
-});
+// Elastic CRUD
+server.post("/elastic/create", createElasticData);
+server.post("/elastic/createClient", createIndex);
+server.get("/elastic/get", readElasticDataAll);
+server.get("/elastic/get/:index", readElasticDataByIndex);
+server.put("/elastic/update/:index/:id", updateElasticData);
+server.del("/elastic/delete/:index/:id", deleteElasticData);
+server.del("/elastic/deleteIndex/:index", deleteElasticIndex);
+server.post("/elastic/createBulk", createElasticBulkData);
 
-server.post("/sql/create", async (req, res) => {
-  try {
-    const firstname = req.body.firstname;
-    const lastname = req.body.lastname;
-    const email = req.body.email;
-    const password = req.body.password;
-
-    const connection = await pool.getConnection();
-
-    const [data] = await connection.query(
-      `INSERT INTO users (firstname, lastname, email, password) 
-                VALUES (?,?,?,?)`,
-      [firstname, lastname, email, password]
-    );
-
-    connection.release();
-
-    res.json({
-      message: "User Created",
-      data: data,
-    });
-  } catch (error) {
-    res.json({
-      message: error.message,
-    });
-    console.error(error);
-  }
-});
-
-server.patch("/sql/update/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { firstname, lastname, email } = req.body;
-    const connection = await pool.getConnection();
-    const [update] = await connection.query(
-      `UPDATE users SET firstname = ?, lastname = ?, email = ? WHERE id = ?`,
-      [firstname, lastname, email, id]
-    );
-    connection.release();
-
-    res.json({ message: "updated", data: update });
-  } catch (err) {
-    res.json({ message: err.message });
-  }
-});
-
-server.del("/sql/delete/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const connection = await pool.getConnection();
-    await connection.query(`DELETE FROM users WHERE id = ?`, [id]);
-    connection.release();
-
-    res.json({ message: "Data Deleted Successfully" });
-  } catch (err) {
-    res.json({ message: err.message });
-  }
-});
-
-//   REDIS CRUD
-
-const redis = new Redis({
-  port: process.env.REDIS_PORT,
-  host: process.env.REDIS_IP,
-  connectTimeout: 10000,
-});
-
-server.post("/redis/create", async (req, res) => {
-  const firstname = req.body.firstname;
-  const lastname = req.body.lastname;
-  const email = req.body.email;
-  const password = req.body.password;
-
-  const response = await redis.hset("userRahul", {
-    firstname: firstname,
-    lastname: lastname,
-    email: email,
-    password: password,
-  });
-  res.json({
-    response,
-    message: "User saved successfully",
-  });
-});
-
-redis.on("connect", () => {
-  console.log("Redis Connected Successfully");
-});
-
-server.get("/redis/get", async (req, res) => {
-  const response = await redis.hgetall("userRahul");
-  res.json({
-    response,
-  });
-});
-
-server.del("/redis/delete/:name", async (req, res) => {
-  console.log(req.params.name);
-  const result = await redis.del(req.params.name);
-  console.log(result);
-  res.json({ result });
-});
-
-// Elasticsearch crud
-
-const client = new Client({
-  node: process.env.ELASTIC_SEARCH,
-});
-
-server.get("/sql/getbulkdata/:gender/:zsign", async (req, res) => {
-  const gender = req.params.gender;
-  const zsign = req.params.zsign;
-
-  const connection = await pool.getConnection();
-  const [data] = await connection.query(
-    "SELECT * FROM bulkdata WHERE gender=? AND zodiacSign=? LIMIT 1000 ",
-    [gender, zsign]
-  );
-  connection.release();
-
-  res.json({
-    message: "success",
-    response: data,
-  });
-});
-
-server.get("/mongo/getbulkdata/:gender/:zsign", async (req, res) => {
-  const zsign = req.params.zsign;
-  const gender = req.params.gender;
-
-  let collection = await db.collection("bulkdata");
-  const resultdata = await collection
-    .find({ gender: gender, zodiacSign: zsign })
-    .toArray();
-  res.json({ message: "success", response: resultdata });
-});
-
-server.get("/elastic/getbulkdata/:gender/:zsign", async (req, res) => {
-  const gender = req.params.gender;
-  const zsign = req.params.zsign;
-  const response = await client.search({
-    index: "rahul-detail",
-    body: {
-      query: {
-        bool: {
-          must: [{ term: { gender: gender } }, { term: { zsign: zsign } }],
-        },
-      },
-    },
-  });
-
-  res.json({ message: "success", response });
-});
-
-server.post("/elastic/createClient", async (req, res) => {
-  const index = req.body.username;
-  await client.indices.create({ index: index });
-
-  res.json({
-    message: "Successfully created index",
-  });
-});
+//Bulk Data Creation
 
 server.post("/sql/createBulk", async (req, res) => {
   let bulkData = [];
@@ -294,7 +55,10 @@ server.post("/sql/createBulk", async (req, res) => {
     const epocTime = new Date().valueOf();
     const date = new Date().toLocaleDateString();
     const time = new Date().toLocaleTimeString();
-    // const password = faker.internet.password();
+    const campaign = "campaign1";
+    const login = Date.now();
+    const logout = Date.now() + 80000000;
+
     bulkData.push({
       firstname,
       lastname,
@@ -304,12 +68,15 @@ server.post("/sql/createBulk", async (req, res) => {
       epocTime,
       date,
       time,
+      campaign,
+      login,
+      logout,
     });
   }
 
   try {
     const query = `INSERT INTO bulkdata (firstname, lastname, email, gender, zodiacSign, epocTime, date, time) VALUES ?`;
-    const connection = await pool.getConnection();
+    const connection = await mysqlDb.getConnection();
     const [data] = await connection.query(query, [bulkData.map(Object.values)]);
     connection.release();
 
@@ -326,80 +93,52 @@ server.post("/sql/createBulk", async (req, res) => {
   }
 });
 
-server.post("/mongo/createBulk", async (req, res) => {
-  let bulkData = [];
-  for (let i = 0; i < 1000000; i++) {
-    const firstname = faker.internet.username();
-    const lastname = faker.internet.username();
-    const email = faker.internet.email();
-    const gender = faker.person.sex();
-    const zodiacSign = faker.person.zodiacSign();
-    const epocTime = new Date().valueOf();
-    const date = new Date().toLocaleDateString();
-    const time = new Date().toLocaleTimeString();
-    // const password = faker.internet.password();
-    bulkData.push({
-      id,
-      firstname,
-      lastname,
-      email,
-      gender,
-      zodiacSign,
-      epocTime,
-      date,
-      time,
-    });
-  }
-
+server.post("/createreport", async (req, res) => {
+  const reportData = createReport();
   try {
-    let collection = await db.collection("bulkdata");
-    const response = await collection.insertMany(bulkData, { ordered: true });
+    let query = `INSERT INTO reportdata (datetime, reportType, disposeType, disposeName, callDuration, agentName, campaignName, processName, leadsetid, referenceUuid, customerUuid, hold, mute, ringing, transfer, conference, callTime, disposeTime) VALUES ?`;
+    let connection = await mysqlDb.getConnection();
+    let collection1 = await db.collection("reportdata");
+    let [data] = await connection.query(query, [[reportData]]);
+    let response = await collection1.insertMany(reportData, { ordered: true });
+    connection.release();
 
-    if (response.insertedCount !== bulkData.length) {
+    if (
+      data.affectedRows !== reportData.length &&
+      response.affectedRows !== reportData.length
+    ) {
       res.json({
         message: "Failed to save some or all documents",
         error: "Insertion count mismatch",
       });
     } else {
-      res.json({ message: "Successfully Added", data: response });
+      res.json({ message: "Successfully Added", data });
     }
   } catch (error) {
-    res.json({ message: "Failed to save", error: error });
+    res.json({ message: "Failed to save", error: error.message });
   }
 });
 
-server.post("/elastic/createBulk", async (req, res) => {
-  let bulkData = [];
-  for (let i = 0; i < 100000; i++) {
-    const firstname = faker.internet.username();
-    const lastname = faker.internet.username();
-    const email = faker.internet.email();
-    // const password = faker.internet.password();
-    const gender = faker.person.sex();
-    const zodiacSign = faker.person.zodiacSign();
-    const epocTime = new Date().valueOf();
-    const date = new Date().toLocaleDateString();
-    const time = new Date().toLocaleTimeString();
+server.post("/createreport/elastic", async (req, res) => {
+  const reportData = createReport();
+  const bulkData = [];
 
-    bulkData.push({ index: { _index: "rahul-detail" } });
-    bulkData.push({
-      firstname,
-      lastname,
-      email,
-      gender,
-      zodiacSign,
-      epocTime,
-      date,
-      time,
-    });
-  }
+  // Push metadata and document pairs
+  reportData.forEach((doc) => {
+    bulkData.push({ index: { _index: "rahul-reportdata" } });
+    bulkData.push(doc);
+  });
 
   try {
-    const response = await client.bulk({ body: bulkData });
+    const response = await elasticDb .bulk({ body: bulkData });
     if (response.errors) {
+      const erroredDocuments = response.items.filter(
+        (item) => item.index && item.index.error
+      );
+
       res.json({
         message: "Failed to save some or all documents",
-        error: response.errors,
+        error: erroredDocuments,
       });
     } else {
       res.json({
@@ -408,106 +147,302 @@ server.post("/elastic/createBulk", async (req, res) => {
       });
     }
   } catch (error) {
-    res.json({ message: "Failed to save", error: error });
+    res.json({ message: "Failed to save", error: error.message });
   }
 });
 
-server.post("/elastic/deleteIndex/:index", async (req, res) => {
-  const index = req.params.index;
-  await client.indices.delete({ index: index });
-
-  res.json({
-    message: "Successfully deleted",
-  });
-});
-
-server.post("/elastic/create", async (req, res) => {
-  const { firstname, lastname, email, password } = req.body;
-
+server.post("/createreport/mongo", async (req, res) => {
+  const reportData = createReport();
   try {
-    const response = await client.index({
-      index: "userrahul",
-      body: { firstname, lastname, email, password },
-    });
-    res.json({
-      message: "Successfully Added",
-      data: response,
-    });
+    let collection1 = await mongoDb.collection("reportdata");
+    let response = await collection1.insertMany(reportData, { ordered: true });
+
+    if (response.insertedCount !== reportData.length) {
+      res.json({
+        message: "Failed to save some or all documents",
+        error: "Insertion count mismatch",
+      });
+    } else {
+      res.json({ message: "Successfully Added", data: response.ops });
+    }
   } catch (error) {
-    res.json({
-      message: "Failed to save",
-      error: error,
-    });
+    res.json({ message: "Failed to save", error: error.message });
   }
 });
 
-server.get("/elastic/get", async (req, res) => {
+// server.get("/mongo/getreport", async (req, res) => {
+//   try {
+//     let collection = await db.collection("reportdata");
+//     // let response = await collection
+//     //   .aggregate([
+//     //     {
+//     //       $group: {
+//     //         _id: null,
+//     //         totalCallDuration: { $sum: "$callDuration" },
+//     //         lowestCallTime: { $min: "$callTime" },
+//     //         highestCallTime: { $max: "$callTime" },
+//     //         averageCallTime: {
+//     //           $avg: {
+//     //             $add: [
+//     //               "$hold",
+//     //               "$mute",
+//     //               "$ringing",
+//     //               "$transfer",
+//     //               "$conference",
+//     //             ],
+//     //           },
+//     //         },
+//     //         averageDisposeTime: { $avg: "$disposeTime" },
+//     //       },
+//     //     },
+//     //   ])
+//     //   .toArray();
+//           const pipeline = [
+//             {
+//               $group: {
+//                 _id: {
+//                   process_name: "$processName",
+//                   call_hour: { $hour: "$datetime" },
+//                   datetime: {
+//                     $dateToString: {
+//                       format: "%Y-%m-%d %H:00:00.000",
+//                       date: "$datetime"
+//                     }
+//                   },
+//                   total_calls: { $sum: "$callTime" },
+//                   call_answered: { $sum: { $cond: [{ $eq: ["$type", "disposed"] }, 1, 0] } },
+//                   missed_calls: { $sum: { $cond: [{ $eq: ["$type", "missed"] }, 1, 0] } },
+//                   call_autodrop: { $sum: { $cond: [{ $eq: ["$type", "autoDrop"] }, 1, 0] } },
+//                   call_autofail: { $sum: { $cond: [{ $eq: ["$type", "autoFailed"] }, 1, 0] } },
+//                   talktime: { $sum: "$callDuration" }
+//                 },
+//               }
+//             }
+//           ];
+
+//           const response = await collection.aggregate(pipeline).toArray();
+//     res.json({
+//       message: "Success",
+//       data: response,
+//     });
+//   } catch (error) {
+//     res.json({
+//       message: "Failed",
+//       data: response.error,
+//     });
+//   }
+// });
+
+let db1;
+connection().then((database) => {
+  db1 = database;
+});
+
+// server.get("/mongo/getreport", async (req, res) => {
+//   try {
+//     let collection1 = await db1.collection("reportdata");
+//     const pipeline = [
+//       {
+//         $group: {
+//           _id: {
+//             process_name: "$processName",
+//             call_hour: {
+//               $hour: "$datetime",
+//             },
+//             datetime: {
+//               $dateToString: {
+//                 format: "%Y-%m-%d %H:00:00.000",
+//                 date: "$datetime",
+//               },
+//             },
+//           },
+//           total_calls: { $sum: 1, },
+//           call_answered: { $sum: { $cond: [ { $eq: ["$type", "disposed"], }, 1, 0, ], }, },
+//           missed_calls: { $sum: { $cond: [ { $eq: ["$type", "missed"], }, 1, 0, ], }, },
+//           call_autodrop: {
+//             $sum: {
+//               $cond: [
+//                 {
+//                   $eq: ["$type", "autoDrop"],
+//                 },
+//                 1,
+//                 0,
+//               ],
+//             },
+//           },
+//           call_autofail: {
+//             $sum: { $cond: [{ $eq: ["$type", "autoFailed"] }, 1, 0] },
+//           },
+//           talktime: { $sum: "$callDuration" },
+//         },
+//       },
+//     ];
+//     const response = await collection1.aggregate(pipeline).toArray();
+//     res.json({ message: "Success", data: response });
+//   } catch (error) {
+//     console.error(error); // Log the error for debugging
+//     res.json({ message: "Failed", data: error });
+//   }
+// });
+
+server.get('/mongo/getreport', async (req, res) => {
   try {
-    const response = await client.search({ index: "rahul" });
+    let collection1 = await db1.collection("reportdata");
+
+    const pipeline = [
+      {
+        $group: {
+          _id: "$campaignName",
+          total_calls: { $sum: 1 },
+          call_answered: { $sum: { $cond: [{ $eq: ["$type", "disposed"] }, 1, 0] } },
+          missed_calls: { $sum: { $cond: [{ $eq: ["$type", "missed"] }, 1, 0] } },
+          call_autodrop: { $sum: { $cond: [{ $eq: ["$type", "autoDrop"] }, 1, 0] } },
+          call_autofail: { $sum: { $cond: [{ $eq: ["$type", "autoFailed"] }, 1, 0] } },
+          talktime: { $sum: "$callDuration" }
+        }
+      },
+      {
+        $project: {
+          process_name: "$processName",
+          total_calls: 1,
+          call_answered: 1,
+          missed_calls: 1,
+          call_autodrop: 1,
+          call_autofail: 1,
+          talktime: 1
+        }
+      }
+    ];
+
+    const result = await collection1.aggregate(pipeline).toArray();
+    res.json({ message: "Success", response: result });
+  } catch (error) {
+    res.json({ message: "Error fetching summary", error: error.message });
+  }
+});
+
+server.get("/sql/getreport", async (req, res) => {
+  let connection = await mysqlDb.getConnection();
+
+  const [data] = await connection.query(`
+      SELECT 
+        campaignName, 
+        COUNT(*) AS Total_Calls,
+        HOUR(datetime) AS Call_hours,
+        DATE_FORMAT(datetime, '%Y-%m-%d %H:00:00.000') AS datetime, 
+        SUM(CASE WHEN reportType = 'disposed' THEN 1 ELSE 0 END) AS Call_Answered,
+        SUM(CASE WHEN reportType = 'missed' THEN 1 ELSE 0 END) AS Missed_Calls,
+        SUM(CASE WHEN reportType = 'autoDrop' THEN 1 ELSE 0 END) AS Call_Autodrop, 
+        SUM(CASE WHEN reportType = 'autoFail' THEN 1 ELSE 0 END) AS Call_Autofail, 
+        SUM(callDuration) AS Talktime   
+      FROM 
+        reportdata 
+      GROUP BY 
+      campaignName
+    `);
+
+  connection.release();
+
+  res.send(data);
+});
+
+server.get('/sql/getallreport', async(req,res) =>{
+  let connection = await mysqlDb.getConnection();
+  const [data] = await connection.query(`SELECT * FROM reportdata`);
+  res.send(data);
+})
+
+server.get("/elastic/getreport", async (req, res) => {
+  try {
+    const response = await elasticDb .search({
+      index: 'rahul-reportdata', 
+      body: {
+        size: 0,
+        aggs: {
+          campaigns: {
+            terms: { field: 'campaignName.keyword' },
+            aggs: {
+              call_hours: {
+                date_histogram: {
+                  field: 'datetime',
+                  calendar_interval: 'hour',
+                  format: 'yyyy-MM-dd HH:00:00.000',
+                },
+                aggs: {
+                  Total_Calls: { value_count: { field: 'campaignName.keyword' } },
+                  Call_Answered: { sum: { script: "doc['reportType.keyword'].value == 'disposed' ? 1 : 0" } },
+                  Missed_Calls: { sum: { script: "doc['reportType.keyword'].value == 'missed' ? 1 : 0" } },
+                  Call_Autodrop: { sum: { script: "doc['reportType.keyword'].value == 'autoDrop' ? 1 : 0" } },
+                  Call_Autofail: { sum: { script: "doc['reportType.keyword'].value == 'autoFail' ? 1 : 0" } },
+                  Talktime: { sum: { field: 'callDuration' } }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
 
     res.json({
       message: "Success",
-      data: response,
+      data: response.aggregations.campaigns.buckets,
     });
   } catch (error) {
-    res.json({
-      message: "Failed",
-      error: error,
-    });
+    console.error(error); // Log the error for debugging
+    res.json({ message: "Failed", data: error });
   }
 });
 
-server.get("/elastic/get/:index", async (req, res) => {
-  const index = req.params.index;
 
-  try {
-    const response = await client.search({ index: index });
+server.get("/sql/getbulkdata/:gender/:zsign", async (req, res) => {
+  const gender = req.params.gender;
+  const zsign = req.params.zsign;
 
-    res.json({
-      message: "Success",
-      data: response,
-    });
-  } catch (error) {
-    res.json({
-      message: "Failed",
-      error: error,
-    });
-  }
-});
+  const connection = await pool.getConnection();
+  const [data] = await connection.query(
+    "SELECT * FROM bulkdata WHERE gender=? AND zodiacSign=? LIMIT 1000 ",
+    [gender, zsign]
+  );
 
-server.put("/elastic/update/:index/:id", async (req, res) => {
-  const { firstname, lastname, email } = req.body;
-  const index = req.params.index;
-  const id = req.params.id;
-
-  const data = { firstname, lastname, email };
-
-  const response = await client.update({
-    index: index,
-    id: id,
-    doc: data,
-  });
+  const [count] = await connection.query("SELECT COUNT(*) from ");
+  connection.release();
 
   res.json({
-    message: "Successfully Updated",
-    data: response,
+    message: "success",
+    response: data,
   });
 });
 
-server.del("/elastic/delete/:index/:id", async (req, res) => {
-  const index = req.params.index;
-  const id = req.params.id;
+server.get("/mongo/getbulkdata/:gender/:zsign", async (req, res) => {
+  const zsign = req.params.zsign;
+  const gender = req.params.gender;
 
-  await client.delete({
-    index: index,
-    id: id,
-  });
-
-  res.json({
-    message: "Successfully Deleted",
-  });
+  let collection = await mongoDb.collection("bulkdata");
+  const resultdata = await collection
+    .find({ gender: gender, zodiacSign: zsign })
+    .toArray();
+  res.json({ message: "success", response: resultdata });
 });
 
-server.listen(port, process.env.IP_PORT, () => {
+server.get("/elastic/getbulkdata/:gender/:zsign", async (req, res) => {
+  const gender = req.params.gender;
+  const zsign = req.params.zsign;
+  const response = await elasticDb .search({
+    index: "rahul-detail",
+    body: {
+      query: {
+        bool: {
+          must: [{ term: { gender: gender } }, { term: { zsign: zsign } }],
+        },
+      },
+    },
+  });
+
+  res.json({ message: "success", response });
+});
+
+server.post("/mongo/createBulk", createMongoBulk);
+
+server.listen(process.env.PORT, process.env.IP_PORT, () => {
   console.log("%s listening at %s", server.name, server.url);
 });

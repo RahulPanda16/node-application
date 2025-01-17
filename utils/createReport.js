@@ -1,4 +1,4 @@
-const { faker } = require("@faker-js/faker");
+   const { faker } = require("@faker-js/faker");
 const { v4: uuidv4 } = require("uuid");
 
 function createReport() {

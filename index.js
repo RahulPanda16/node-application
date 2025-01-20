@@ -45,6 +45,7 @@ const {
   createElasticReport,
   getElasticAllReport,
 } = require("./Controller/elasticsearch");
+const { createReport } = require("./utils/createReport");
 
 const server = restify.createServer();
 server.use(bodyParser.json());
@@ -362,7 +363,7 @@ server.get("/elastic/fetchSummary", async (req, res) => {
 //     res.json({ message: "Error fetching summary", error: error.message });
 //   }
 // });
-
+  
 server.listen(process.env.PORT, process.env.IP_PORT, () => {
   console.log("%s listening at %s", server.name, server.url);
 });

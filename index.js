@@ -190,7 +190,319 @@ server.get("/elastic/callreportsummary/get", async (req, res) => {
   }
 });
 
-server.get("/elastic/fetchSummary", async (req, res) => {
+// server.get("/elasticsearch/hourlyReport", async (req, res) => {
+//   try {
+//     const result = await client.search({
+//       index: "rahul-reportdata",
+//       body: {
+//         size: 0,
+//         aggs: {
+//           hour: {
+//             date_histogram: {
+//               field: "datetime",
+//               calendar_interval: "hour",
+//             },
+//             aggs: {
+//               totalDuration: {
+//                 sum: {
+//                   field: "callDuration",
+//                 },
+//               },
+//               totalTalkTime: {
+//                 sum: {
+//                   field: "callTime",
+//                 },
+//               },
+//               totalHoldTime: {
+//                 sum: {
+//                   field: "hold",
+//                 },
+//               },
+//               totalMuteTime: {
+//                 sum: {
+//                   field: "mute",
+//                 },
+//               },
+//               totalTransferTime: {
+//                 sum: {
+//                   field: "transfer",
+//                 },
+//               },
+//               totalConferenceTime: {
+//                 sum: {
+//                   field: "conference",
+//                 },
+//               },
+//               totalRingingTime: {
+//                 sum: {
+//                   field: "ringing",
+//                 },
+//               },
+//               byAgent: {
+//                 terms: {
+//                   field: "agentName.keyword",
+//                   size: 10,
+//                 },
+//                 aggs: {
+//                   byCampaign: {
+//                     terms: {
+//                       field: "campaignName.keyword",
+//                       size: 10,
+//                     },
+//                     aggs: {
+//                       byProcess: {
+//                         terms: {
+//                           field: "processName.keyword",
+//                           size: 10,
+//                         },
+//                         aggs: {
+//                           byDisposeType: {
+//                             terms: {
+//                               field: "disposeType.keyword",
+//                               size: 10,
+//                             },
+//                             aggs: {
+//                               totalDuration: {
+//                                 sum: {
+//                                   field: "callDuration",
+//                                 },
+//                               },
+//                               totalTalkTime: {
+//                                 sum: {
+//                                   field: "callTime",
+//                                 },
+//                               },
+//                               totalHoldTime: {
+//                                 sum: {
+//                                   field: "hold",
+//                                 },
+//                               },
+//                               totalMuteTime: {
+//                                 sum: {
+//                                   field: "mute",
+//                                 },
+//                               },
+//                               totalTransferTime: {
+//                                 sum: {
+//                                   field: "transfer",
+//                                 },
+//                               },
+//                               totalConferenceTime: {
+//                                 sum: {
+//                                   field: "conference",
+//                                 },
+//                               },
+//                               totalRingingTime: {
+//                                 sum: {
+//                                   field: "ringing",
+//                                 },
+//                               },
+//                             },
+//                           },
+//                         },
+//                       },
+//                     },
+//                   },
+//                 },
+//               },
+//             },
+//           },
+//         },
+//       },
+//     });
+
+//     const formatTime = (seconds) => {
+//       const hours = Math.floor(seconds / 3600);
+//       const minutes = Math.floor((seconds % 3600) / 60);
+//       const secs = seconds % 60;
+//       return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+//     };
+
+//     let resultarray = [];
+//     let newArray = result.aggregations.hour.buckets;
+
+//     newArray.forEach((e) => {
+//       // Format the hour in the desired format
+//       const date = new Date(e.key_as_string);
+//       const formattedHour = date.toISOString().slice(0, 19).replace('T', ' '); // "YYYY-MM-DD HH:mm:ss"
+
+//       e.byAgent.buckets.forEach(agentBucket => {
+//         const agentName = agentBucket.key;
+
+//         agentBucket.byCampaign.buckets.forEach(campaignBucket => {
+//           const campaignName = campaignBucket.key;
+
+//           campaignBucket.byProcess.buckets.forEach(processBucket => {
+//             const processName = processBucket.key;
+
+//             processBucket.byDisposeType.buckets.forEach(disposeBucket => {
+//               const disposeType = disposeBucket.key;
+
+//               const totalDuration = formatTime(disposeBucket.totalDuration.value || 0);
+//               const totalRingingTime = formatTime(disposeBucket.totalRingingTime.value || 0);
+//               const totalTalkTime = formatTime(disposeBucket.totalTalkTime.value || 0);
+//               const totalHoldTime = formatTime(disposeBucket.totalHoldTime.value || 0);
+//               const totalMuteTime = formatTime(disposeBucket.totalMuteTime.value || 0);
+//               const totalTransferTime = formatTime(disposeBucket.totalTransferTime.value || 0);
+//               const totalConferenceTime = formatTime(disposeBucket.totalConferenceTime.value || 0);
+
+//               resultarray.push({
+//                 hour: formattedHour,
+//                 agentName,
+//                 campaignName,
+//                 processName,
+//                 disposeType,
+//                 totalDuration,
+//                 totalRingingTime,
+//                 totalTalkTime,
+//                 totalHoldTime,
+//                 totalMuteTime,
+//                 totalTransferTime,
+//                 totalConferenceTime,
+//               });
+//             });
+//           });
+//         });
+//       });
+//     });
+
+//     res.send(resultarray);
+//   } catch (err) {
+//     console.error("Error executing Elasticsearch query:", err);
+//     res.send({ error: "An error occurred while fetching data." });
+//   }
+// });
+
+// server.get("/elastic/fetchSummary", async (req, res) => {
+//   try {
+//     const response = await client.search({
+//       index: "rahul-reportdata",
+//       body: {
+//         size: 10000,
+//         query: {
+//           range: {
+//             callDuration: {
+//               gt: 0,
+//             },
+//           },
+//         },
+//         aggs: {
+//           hours: {
+//             date_histogram: {
+//               field: "datetime",
+//               fixed_interval: "1h",
+//               format: "HH",
+//               order: { _key: "asc" },
+//             },
+//             aggs: {
+//               totalHoldTime: {
+//                 sum: {
+//                   field: "hold",
+//                 },
+//               },
+//               Call_Answered: {
+//                 filter: { term: { "reportType.keyword": "disposed" } },
+//                 aggs: {
+//                   sum: {
+//                     field: "datetime",
+//                   },
+//                 },
+//               },
+//               Call_Autodrop: {
+//                 filter: {
+//                   term: { "reportType.keyword": "autoDrop" },
+//                 },
+//                 aggs: {
+//                   sum: {
+//                     field: "datetime",
+//                   },
+//                 },
+//               },
+//               Call_Autofail: {
+//                 filter: {
+//                   term: { "reportType.keyword": "autoFail" },
+//                 },
+//                 aggs: {
+//                   sum: {
+//                     field: "datetime",
+//                   },
+//                 },
+//               },
+//               Missed_Calls: {
+//                 filter: {
+//                   term: { "reportType.keyword": "missed" },
+//                 },
+//                 aggs: {
+//                   sum: {
+//                     field: "datetime",
+//                   },
+//                 },
+//               },
+//               totalMuteTime: {
+//                 sum: {
+//                   field: "mute",
+//                 },
+//               },
+//               totalRingingTime: {
+//                 sum: {
+//                   field: "ringing",
+//                 },
+//               },
+//               totalTransferTime: {
+//                 sum: {
+//                   field: "transfer",
+//                 },
+//               },
+//               totalConferenceTime: {
+//                 sum: {
+//                   field: "conference",
+//                 },
+//               },
+//               Total_Calls: {
+//                 sum: {
+//                   field: "callTime",
+//                 },
+//               },
+//               Call_Answered: {
+//                 sum: {
+//                   field: "disposeTime",
+//                 },
+//               },
+//               totalDuration: {
+//                 sum: {
+//                   field: "callDuration",
+//                 },
+//               },
+//               nonZeroDuration: {
+//                 bucket_selector: {
+//                   buckets_path: {
+//                     totalDuration: "totalDuration",
+//                   },
+//                   script: "params.totalDuration > 0",
+//                 },
+//               },
+//             },
+//           },
+//         },
+//       },
+//     });
+
+//     if (
+//       response.aggregations &&
+//       response.aggregations.hours &&
+//       response.aggregations.hours.buckets
+//     ) {
+//       res.send(response.aggregations.hours.buckets);
+//     } else {
+//       res.send([]);
+//     }
+//   } catch (error) {
+//     console.error("Error fetching summary data:", error);
+//     res.send("Error fetching summary data");
+//   }
+// });
+
+server.get("/elastic/fetchSummary1", async (req, res) => {
   try {
     const response = await client.search({
       index: "rahul-reportdata",
@@ -215,6 +527,52 @@ server.get("/elastic/fetchSummary", async (req, res) => {
               totalHoldTime: {
                 sum: {
                   field: "hold",
+                },
+              },
+              Call_Answered: {
+                filter: { term: { "reportType.keyword": "disposed" } },
+                aggs: {
+                  count: {
+                    value_count: {
+                      field: "datetime",
+                    },
+                  },
+                },
+              },
+              Call_Autodrop: {
+                filter: {
+                  term: { "reportType.keyword": "autoDrop" },
+                },
+                aggs: {
+                  count: {
+                    value_count: {
+                      field: "datetime",
+                    },
+                  },
+                },
+              },
+              Call_Autofail: {
+                filter: {
+                  term: { "reportType.keyword": "autoFail" },
+                },
+                aggs: {
+                  count: {
+                    value_count: {
+                      field: "datetime",
+                    },
+                  },
+                },
+              },
+              Missed_Calls: {
+                filter: {
+                  term: { "reportType.keyword": "missed" },
+                },
+                aggs: {
+                  count: {
+                    value_count: {
+                      field: "datetime",
+                    },
+                  },
                 },
               },
               totalMuteTime: {
@@ -242,7 +600,7 @@ server.get("/elastic/fetchSummary", async (req, res) => {
                   field: "callTime",
                 },
               },
-              Call_Answered: {
+              Total_Disposed_Calls: {
                 sum: {
                   field: "disposeTime",
                 },
@@ -271,15 +629,244 @@ server.get("/elastic/fetchSummary", async (req, res) => {
       response.aggregations.hours &&
       response.aggregations.hours.buckets
     ) {
-      res.json(response.aggregations.hours.buckets);
+      res.send(response.aggregations.hours.buckets);
     } else {
-      res.json([]);
+      res.send([]);
     }
   } catch (error) {
     console.error("Error fetching summary data:", error);
-    res.send("Error fetching summary data");
+    res.status(500).send("Error fetching summary data");
   }
 });
+
+// server.get("/elastic/summary", async (req, res) => {
+//   try {
+//     const result = await client.search({
+//       index: "rahul-reportdata",
+//       body: {
+//         size: 0,
+//         aggs: {
+//           hour: {
+//             date_histogram: {
+//               field: "dateTime",
+//               calendar_interval: "HH",
+//             },
+//             aggs: {
+//               TotalCalls: {
+//                 sum: {
+//                   field: "callTime.keyword",
+//                 },
+//               },
+//               Call_hour:{
+//                 sum:{
+//                   field:"callDuration",
+//                 },
+//               },
+//               Missed_Calls: {
+//                 filter: {
+//                   term: { "reportType.keyword": "missed" }
+//                 },
+//                 aggs: {
+//                   count: {
+//                     value_count: {
+//                       field: "reportType.keyword"
+//                     }
+//                   }
+//                 }
+//               },
+//               Call_Answered: {
+//                 filter: {
+//                   term: { "reportType.keyword": "disposed" }
+//                 },
+//                 aggs: {
+//                   count: {
+//                     value_count: {
+//                       field: "reportType.keyword"
+//                     }
+//                   }
+//                 }
+//               },
+//               Call_Autofail: {
+//                 filter: {
+//                   term: { "reportType.keyword": "autoFailed" }
+//                 },
+//                 aggs: {
+//                   count: {
+//                     value_count: {
+//                       field: "reportType.keyword"
+//                     }
+//                   }
+//                 }
+//               },
+//               Call_Autodrop: {
+//                 filter: {
+//                   term: { "reportType.keyword": "autoDrop" }
+//                 },
+//                 aggs: {
+//                   count: {
+//                     value_count: {
+//                       field: "reportType.keyword"
+//                     }
+//                   }
+//                 }
+//               },
+//               Talktime: {
+//                 sum: {
+//                   field: "callDuration",
+//                 },
+//               },
+//             },
+//           },
+//         },
+//       },
+//     });
+
+//     const formatTime = (seconds) => {
+//       const hours = Math.floor(seconds / 3600);
+//       const minutes = Math.floor((seconds % 3600) / 60);
+//       const secs = seconds % 60;
+//       return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+//     };
+
+//     let resultarray = [];
+//     let newArray = result.aggregations.hour.buckets;
+
+//     newArray.forEach((e) => {
+//         const TotalCalls = formatTime(e.TotalCalls.value || 0);
+//         const CallHours = formatTime(e.Call_hour.value || 0);
+//         const MissedCalls = e.MissedCalls.count.value || 0;
+//         const CallAnswered = e.CallAnswered.count.value || 0;
+//         const CallAutofailed = e.CallAutofailed.count.value || 0;
+//         const CallAutodrop = e.CallAutodrop.count.value || 0;
+//         const Talktime = formatTime(e.Talktime.value || 0);
+
+//         resultarray.push({
+//           TotalCalls,
+//           CallHours,
+//           MissedCalls,
+//           CallAnswered,
+//           CallAutofailed,
+//           CallAutodrop,
+//           Talktime,
+//         });
+//     });
+//     res.send(resultarray);
+//   } catch (err) {
+//     console.error("Error executing Elasticsearch query:", err);
+//     res.send({ error: "An error occurred while fetching data." });
+//   }
+// });
+
+// server.get("/elastic/summary1", async (req, res) => {
+//   try {
+//     const result = await client.search({
+//       index: "rahul-reportdata",
+//       body: {
+//         size: 0,
+//         aggs: {
+//           hour: {
+//             date_histogram: {
+//               field: "datetime",
+//               calendar_interval: "hour",
+//             },
+//             aggs: {
+//               Talktime: {
+//                 sum: {
+//                   field: "callDuration",
+//                 },
+//               },
+//               Total_Calls: {
+//                 value_count: {
+//                   field: "callTime",
+//                 },
+//               },
+//               Call_Answered: {
+//                 filter: {
+//                   term: { "reportType.keyword": "disposed" },
+//                 },
+//                 aggs: {
+//                   count: {
+//                     value_count: {
+//                       field: "reportType.keyword",
+//                     },
+//                   },
+//                 },
+//               },
+//               Missed_Calls: {
+//                 filter: {
+//                   term: { "reportType.keyword": "missed" },
+//                 },
+//                 aggs: {
+//                   count: {
+//                     value_count: {
+//                       field: "reportType.keyword",
+//                     },
+//                   },
+//                 },
+//               },
+//               Call_Autodrop: {
+//                 filter: {
+//                   term: { "reportType.keyword": "autoDrop" },
+//                 },
+//                 aggs: {
+//                   count: {
+//                     value_count: {
+//                       field: "reportType.keyword",
+//                     },
+//                   },
+//                 },
+//               },
+//               Call_Autofail: {
+//                 filter: {
+//                   term: { "reportType.keyword": "autoFail" },
+//                 },
+//                 aggs: {
+//                   count: {
+//                     value_count: {
+//                       field: "reportType.keyword",
+//                     },
+//                   },
+//                 },
+//               },
+//             },
+//           },
+//         },
+//       },
+//     });
+
+//     const formatTime = (seconds) => {
+//       const hours = Math.floor(seconds / 3600);
+//       const minutes = Math.floor((seconds % 3600) / 60);
+//       const secs = seconds % 60;
+//       return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+//     };
+
+//     let resultArray = [];
+//     let newArray = result.aggregations.hour.buckets;
+
+//     newArray.forEach((e) => {
+//       const Talktime = formatTime(e.Talktime.value || 0);
+//       const TotalCalls = e.Total_Calls.value || 0;
+//       const CallAnswered = e.Call_Answered.count.value || 0;
+//       const MissedCalls = e.Missed_Calls.count.value || 0;
+//       const CallAutodrop = e.Call_Autodrop.count.value || 0;
+//       const CallAutofail = e.Call_Autofail.count.value || 0;
+
+//       resultArray.push({
+//         Talktime,
+//         TotalCalls,
+//         CallAnswered,
+//         MissedCalls,
+//         CallAutodrop,
+//         CallAutofail,
+//       });
+//     });
+//     res.send(resultArray);
+//   } catch (error) {
+//     console.error("Error executing Elasticsearch query:", error);
+//     res.send({ error: "An error occurred while fetching data." });
+//   }
+// });
 
 // server.get("/elastic/callreportsummary/get1", async (req, res) => {
 //   try {
@@ -363,7 +950,7 @@ server.get("/elastic/fetchSummary", async (req, res) => {
 //     res.json({ message: "Error fetching summary", error: error.message });
 //   }
 // });
-  
+
 server.listen(process.env.PORT, process.env.IP_PORT, () => {
   console.log("%s listening at %s", server.name, server.url);
 });
